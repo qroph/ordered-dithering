@@ -109,13 +109,28 @@ def generate_lut(palette, res):
     return image
 
 
-lut_res = 32
+lut_res = 64
 #palette = get_palette("palette-C64.png")
 #lut = generate_lut(palette, lut_res)
 #lut.save("color-grading.png")
 
 
 lut = Image.open("color-grading.png")
+
+threshold_matrix = [
+    0,  32, 8,  40, 2,  34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44, 4,  36, 14, 46, 6,  38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+    3,  35, 11, 43, 1,  33, 9,  41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47, 7,  39, 13, 45, 5,  37,
+    63, 31, 55, 23, 61, 29, 53, 21]
+
+def get_threshold(pos):
+    x = int(pos[0]) % 8
+    y = int(pos[1]) % 8
+    return threshold_matrix[x + y * 8] / 64.0
 
 def get_lut_color(lut, color, row, res):
     r = color[0] / 256.0
@@ -131,6 +146,16 @@ for pos in np.ndindex((test_image.width, test_image.height)):
     old_color = test_image.getpixel(pos)
     nearest_color = get_lut_color(lut, old_color, 0, lut_res)
     second_nearest_color = get_lut_color(lut, old_color, 1, lut_res)
-    test_image.putpixel(pos, second_nearest_color)
+
+    threshold = get_threshold(pos)
+
+    old_color_lab = rgb_to_lab(old_color)
+    nearest_color_lab = rgb_to_lab(nearest_color)
+    second_nearest_color_lab = rgb_to_lab(second_nearest_color)
+
+    diff = (old_color_lab[0] - nearest_color_lab[0]) / (second_nearest_color_lab[0] - nearest_color_lab[0])
+
+    new_color = nearest_color if diff < threshold else second_nearest_color
+    test_image.putpixel(pos, new_color)
 
 test_image.save("test-palette.png")
