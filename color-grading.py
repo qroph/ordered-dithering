@@ -5,23 +5,6 @@ class Palette:
         self.num_colors = len(rgb_colors)
         self.rgb = list(map(lambda x : tuple(x), rgb_colors))
         self.lab = list(map(lambda x : rgb_to_lab(x), self.rgb))
-        self.nearest_darker_color_indices = [i for i in range(self.num_colors)]
-        self.nearest_lighter_color_indices = [i for i in range(self.num_colors)]
-
-        for j in range(self.num_colors):
-            nearest_darker_color_dist = np.inf
-            nearest_lighter_color_dist = np.inf
-            for i in range(self.num_colors):
-                if self.lab[i][0] < self.lab[j][0]:
-                    dist = get_lab_distance(self.lab[i], self.lab[j])
-                    if dist < nearest_darker_color_dist:
-                        nearest_darker_color_dist = dist
-                        self.nearest_darker_color_indices[j] = i
-                elif self.lab[i][0] > self.lab[j][0]:
-                    dist = get_lab_distance(self.lab[i], self.lab[j])
-                    if dist < nearest_lighter_color_dist:
-                        nearest_lighter_color_dist = dist
-                        self.nearest_lighter_color_indices[j] = i
 
     def get_nearest_colors(self, color):
         lab_color = rgb_to_lab(color)
@@ -42,10 +25,7 @@ class Palette:
                 second_nearest_color_dist = dist
                 second_nearest_color_index = i
 
-        return [self.rgb[nearest_color_index],
-            self.rgb[second_nearest_color_index],
-            self.rgb[self.nearest_darker_color_indices[nearest_color_index]],
-            self.rgb[self.nearest_lighter_color_indices[nearest_color_index]]]
+        return [self.rgb[nearest_color_index], self.rgb[second_nearest_color_index]]
 
 def rgb_to_lab(color):
     r = color[0] / 255.0
@@ -95,22 +75,19 @@ def get_palette(filename):
     return Palette(rgb_colors)
 
 def generate_lut(palette, res):
-    image = Image.new("RGB", (res * res, 5 * res))
+    image = Image.new("RGB", (res * res, 2 * res))
     step = 256.0 / (res - 1)
     for r, g, b in np.ndindex((res, res, res)):
         color = (int(r * step), int(g * step), int(b * step))
         nearest_colors = palette.get_nearest_colors(color)
         image.putpixel((r + b * res, g), nearest_colors[0])
         image.putpixel((r + b * res, g + res), nearest_colors[1])
-        image.putpixel((r + b * res, g + 2 * res), nearest_colors[2])
-        image.putpixel((r + b * res, g + 3 * res), nearest_colors[3])
-        image.putpixel((r + b * res, g + 4 * res), color)
 
     return image
 
 
-lut_res = 64
-#palette = get_palette("palette-C64.png")
+lut_res = 8
+#palette = get_palette("palette-c64.png")
 #lut = generate_lut(palette, lut_res)
 #lut.save("color-grading.png")
 
@@ -147,15 +124,14 @@ for pos in np.ndindex((test_image.width, test_image.height)):
     nearest_color = get_lut_color(lut, old_color, 0, lut_res)
     second_nearest_color = get_lut_color(lut, old_color, 1, lut_res)
 
-    threshold = get_threshold(pos)
-
     old_color_lab = rgb_to_lab(old_color)
     nearest_color_lab = rgb_to_lab(nearest_color)
     second_nearest_color_lab = rgb_to_lab(second_nearest_color)
-
+    threshold = get_threshold(pos)
     diff = (old_color_lab[0] - nearest_color_lab[0]) / (second_nearest_color_lab[0] - nearest_color_lab[0])
 
     new_color = nearest_color if diff < threshold else second_nearest_color
+
     test_image.putpixel(pos, new_color)
 
 test_image.save("test-palette.png")
