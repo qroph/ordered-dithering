@@ -24,15 +24,26 @@ class Palette:
                         self.nearest_lighter_color_indices[j] = i
 
     def get_nearest_colors(self, color):
+        lab_color = rgb_to_lab(color)
+        
         nearest_color_dist = np.inf
         nearest_color_index = 0
+        second_nearest_color_dist = np.inf
+        second_nearest_color_index = 0
+
         for i in range(self.num_colors):
-            dist = get_lab_distance(self.lab[i], rgb_to_lab(color))
+            dist = get_lab_distance(self.lab[i], lab_color)
             if dist < nearest_color_dist:
+                second_nearest_color_dist = nearest_color_dist
+                second_nearest_color_index = nearest_color_index
                 nearest_color_dist = dist
                 nearest_color_index = i
+            elif dist < second_nearest_color_dist:
+                second_nearest_color_dist = dist
+                second_nearest_color_index = i
 
         return [self.rgb[nearest_color_index],
+            self.rgb[second_nearest_color_index],
             self.rgb[self.nearest_darker_color_indices[nearest_color_index]],
             self.rgb[self.nearest_lighter_color_indices[nearest_color_index]]]
 
@@ -84,7 +95,7 @@ def get_palette(filename):
     return Palette(rgb_colors)
 
 def generate_lut(palette, res):
-    image = Image.new("RGB", (res * res, 3 * res))
+    image = Image.new("RGB", (res * res, 5 * res))
     step = 256.0 / (res - 1)
     for r, g, b in np.ndindex((res, res, res)):
         color = (int(r * step), int(g * step), int(b * step))
@@ -92,9 +103,34 @@ def generate_lut(palette, res):
         image.putpixel((r + b * res, g), nearest_colors[0])
         image.putpixel((r + b * res, g + res), nearest_colors[1])
         image.putpixel((r + b * res, g + 2 * res), nearest_colors[2])
+        image.putpixel((r + b * res, g + 3 * res), nearest_colors[3])
+        image.putpixel((r + b * res, g + 4 * res), color)
 
     return image
 
-palette = get_palette("palette-C64.png")
-lut = generate_lut(palette, 32)
-lut.save("color-grading.png")
+
+lut_res = 32
+#palette = get_palette("palette-C64.png")
+#lut = generate_lut(palette, lut_res)
+#lut.save("color-grading.png")
+
+
+lut = Image.open("color-grading.png")
+
+def get_lut_color(lut, color, row, res):
+    r = color[0] / 256.0
+    g = color[1] / 256.0
+    b = color[2] / 256.0
+    cell = np.floor(b * res)
+    x = np.floor(r * res) + cell * res + 0.5 / lut.width
+    y = np.floor(g * res) + row * res + 0.5 / lut.height
+    return lut.getpixel((x, y))
+
+test_image = Image.open("test.png")
+for pos in np.ndindex((test_image.width, test_image.height)):
+    old_color = test_image.getpixel(pos)
+    nearest_color = get_lut_color(lut, old_color, 0, lut_res)
+    second_nearest_color = get_lut_color(lut, old_color, 1, lut_res)
+    test_image.putpixel(pos, second_nearest_color)
+
+test_image.save("test-palette.png")
