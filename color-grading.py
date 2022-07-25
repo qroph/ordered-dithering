@@ -8,7 +8,7 @@ class Palette:
 
     def get_nearest_colors(self, color):
         lab_color = rgb_to_lab(color)
-        
+
         nearest_color_dist = np.inf
         nearest_color_index = 0
         second_nearest_color_dist = np.inf
@@ -25,7 +25,7 @@ class Palette:
                 second_nearest_color_dist = dist
                 second_nearest_color_index = i
 
-        return [self.rgb[nearest_color_index], self.rgb[second_nearest_color_index]]
+        return (self.rgb[nearest_color_index], self.rgb[second_nearest_color_index])
 
 def rgb_to_lab(color):
     r = color[0] / 255.0
@@ -86,15 +86,13 @@ def generate_lut(palette, res):
     return image
 
 
-lut_res = 8
+lut_res = 64
 #palette = get_palette("palette-c64.png")
 #lut = generate_lut(palette, lut_res)
 #lut.save("color-grading.png")
 
 
-lut = Image.open("color-grading.png")
-
-threshold_matrix = [
+dither_matrix = [
     0,  32, 8,  40, 2,  34, 10, 42,
     48, 16, 56, 24, 50, 18, 58, 26,
     12, 44, 4,  36, 14, 46, 6,  38,
@@ -104,10 +102,10 @@ threshold_matrix = [
     15, 47, 7,  39, 13, 45, 5,  37,
     63, 31, 55, 23, 61, 29, 53, 21]
 
-def get_threshold(pos):
+def get_dither_threshold(pos):
     x = int(pos[0]) % 8
     y = int(pos[1]) % 8
-    return threshold_matrix[x + y * 8] / 64.0
+    return dither_matrix[x + y * 8] / 64.0
 
 def get_lut_color(lut, color, row, res):
     r = color[0] / 256.0
@@ -118,19 +116,24 @@ def get_lut_color(lut, color, row, res):
     y = np.floor(g * res) + row * res + 0.5 / lut.height
     return lut.getpixel((x, y))
 
+
+lut = Image.open("color-grading.png")
 test_image = Image.open("test.png")
+
+def color_diff(color0, color1):
+    d = np.subtract(np.array(color0), np.array(color1))
+    d = np.divide(d, 255.0)
+    return np.sqrt(d[0]**2 * 0.299 + d[1]**2 * 0.587 + d[2]**2 * 0.114)
+
 for pos in np.ndindex((test_image.width, test_image.height)):
+    spread = 128.0
+    threshold = get_dither_threshold(pos) - 0.5
+
     old_color = test_image.getpixel(pos)
-    nearest_color = get_lut_color(lut, old_color, 0, lut_res)
-    second_nearest_color = get_lut_color(lut, old_color, 1, lut_res)
-
-    old_color_lab = rgb_to_lab(old_color)
-    nearest_color_lab = rgb_to_lab(nearest_color)
-    second_nearest_color_lab = rgb_to_lab(second_nearest_color)
-    threshold = get_threshold(pos)
-    diff = (old_color_lab[0] - nearest_color_lab[0]) / (second_nearest_color_lab[0] - nearest_color_lab[0])
-
-    new_color = nearest_color if diff < threshold else second_nearest_color
+    dither_color = np.clip(np.add(old_color, spread * threshold), 0, 255)
+    c0 = get_lut_color(lut, dither_color, 0, lut_res)
+    c1 = get_lut_color(lut, dither_color, 1, lut_res)
+    new_color = c0 if color_diff(old_color, c0) < color_diff(old_color, c1) else c1
 
     test_image.putpixel(pos, new_color)
 
