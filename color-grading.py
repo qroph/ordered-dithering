@@ -1,31 +1,24 @@
 import numpy as np
 from PIL import Image
 class Palette:
-    def __init__(self, rgb_colors):
-        self.num_colors = len(rgb_colors)
-        self.rgb = list(map(lambda x : tuple(x), rgb_colors))
-        self.lab = list(map(lambda x : rgb_to_lab(x), self.rgb))
+    def __init__(self, color_values):
+        rgb_array = np.array(color_values, np.uint8).reshape((len(color_values) // 3, 3))
+        self.num_colors = len(rgb_array)
+        self.rgb = list(map(lambda x : tuple(x), rgb_array))
+        self.lab = list(map(lambda x : rgb_to_lab(x), rgb_array))
 
-    def get_nearest_colors(self, color):
+    def get_nearest_color(self, color):
         lab_color = rgb_to_lab(color)
 
         nearest_color_dist = np.inf
         nearest_color_index = 0
-        second_nearest_color_dist = np.inf
-        second_nearest_color_index = 0
-
         for i in range(self.num_colors):
             dist = get_lab_distance(self.lab[i], lab_color)
             if dist < nearest_color_dist:
-                second_nearest_color_dist = nearest_color_dist
-                second_nearest_color_index = nearest_color_index
                 nearest_color_dist = dist
                 nearest_color_index = i
-            elif dist < second_nearest_color_dist:
-                second_nearest_color_dist = dist
-                second_nearest_color_index = i
 
-        return (self.rgb[nearest_color_index], self.rgb[second_nearest_color_index])
+        return self.rgb[nearest_color_index]
 
 def rgb_to_lab(color):
     r = color[0] / 255.0
@@ -70,26 +63,25 @@ def get_lab_distance(lab_color_0, lab_color_1):
 
 def get_palette(filename):
     palette_image = Image.open(filename)
-    rgb_colors = palette_image.getpalette()
-    rgb_colors = np.array(rgb_colors, np.uint8).reshape((len(rgb_colors) // 3, 3))
-    return Palette(rgb_colors)
+    color_values = palette_image.getpalette()
+    return Palette(color_values)
 
 def generate_lut(palette, res):
-    image = Image.new("RGB", (res * res, 2 * res))
+    image = Image.new("RGBA", (res * res, res))
+
     step = 256.0 / (res - 1)
     for r, g, b in np.ndindex((res, res, res)):
         color = (int(r * step), int(g * step), int(b * step))
-        nearest_colors = palette.get_nearest_colors(color)
-        image.putpixel((r + b * res, g), nearest_colors[0])
-        image.putpixel((r + b * res, g + res), nearest_colors[1])
+        nearest_color = palette.get_nearest_color(color)
+        lightness = np.clip(int(rgb_to_lab(color)[0] / 100.0 * 255.0), 0, 255)
+        image.putpixel((r + b * res, g), (*nearest_color, lightness))
 
     return image
 
 
-lut_res = 64
-#palette = get_palette("palette-c64.png")
-#lut = generate_lut(palette, lut_res)
-#lut.save("color-grading.png")
+palette = get_palette("palette-c64.png")
+lut = generate_lut(palette, 64)
+lut.save("color-grading.png")
 
 
 dither_matrix = [
@@ -107,34 +99,27 @@ def get_dither_threshold(pos):
     y = int(pos[1]) % 8
     return dither_matrix[x + y * 8] / 64.0
 
-def get_lut_color(lut, color, row, res):
-    r = color[0] / 256.0
-    g = color[1] / 256.0
-    b = color[2] / 256.0
-    cell = np.floor(b * res)
-    x = np.floor(r * res) + cell * res + 0.5 / lut.width
-    y = np.floor(g * res) + row * res + 0.5 / lut.height
+def get_lut_color(lut, color):
+    size = lut.height
+    rgb = np.divide(color, 256.0)
+    cell = np.floor(rgb[2] * size)
+    x = np.floor(rgb[0] * size) + cell * size + 0.5 / lut.width
+    y = np.floor(rgb[1] * size) + 0.5 / lut.height
     return lut.getpixel((x, y))
 
 
 lut = Image.open("color-grading.png")
 test_image = Image.open("test.png")
 
-def color_diff(color0, color1):
-    d = np.subtract(np.array(color0), np.array(color1))
-    d = np.divide(d, 255.0)
-    return np.sqrt(d[0]**2 * 0.299 + d[1]**2 * 0.587 + d[2]**2 * 0.114)
-
 for pos in np.ndindex((test_image.width, test_image.height)):
-    spread = 128.0
+    color = test_image.getpixel(pos)
+    lightness = get_lut_color(lut, color)[3]
+
+    spread = np.clip(lightness * 2, 50, 150)
     threshold = get_dither_threshold(pos) - 0.5
+    dither_color = np.clip(np.add(color, spread * threshold), 0, 255)
 
-    old_color = test_image.getpixel(pos)
-    dither_color = np.clip(np.add(old_color, spread * threshold), 0, 255)
-    c0 = get_lut_color(lut, dither_color, 0, lut_res)
-    c1 = get_lut_color(lut, dither_color, 1, lut_res)
-    new_color = c0 if color_diff(old_color, c0) < color_diff(old_color, c1) else c1
-
+    new_color = get_lut_color(lut, dither_color)
     test_image.putpixel(pos, new_color)
 
 test_image.save("test-palette.png")
