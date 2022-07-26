@@ -1,14 +1,18 @@
 import numpy as np
 from PIL import Image
 class Palette:
-    def __init__(self, color_values):
-        rgb_array = np.array(color_values, np.uint8).reshape((len(color_values) // 3, 3))
+    def __init__(self, rgb_color_values):
+        """Initializes a palette using the given list of RGB color values [r, g, b, ...]."""
+
+        rgb_array = np.array(rgb_color_values, np.uint8).reshape((len(rgb_color_values) // 3, 3))
         self.num_colors = len(rgb_array)
         self.rgb = tuple(tuple(x) for x in rgb_array)
         self.lab = tuple(rgb_to_lab(x) for x in rgb_array)
 
-    def get_nearest_color(self, color):
-        lab_color = rgb_to_lab(color)
+    def get_nearest_color(self, rgb_color):
+        """Returns a palette color that is most similar to the given color.""" 
+
+        lab_color = rgb_to_lab(rgb_color)
 
         nearest_color_dist = np.inf
         nearest_color_index = 0
@@ -20,8 +24,10 @@ class Palette:
 
         return self.rgb[nearest_color_index]
 
-def rgb_to_lab(color):
-    rgb = tuple(x / 255.0 for x in color)
+def rgb_to_lab(rgb_color):
+    """Converts the given RGB color to the CIELAB color space."""
+
+    rgb = tuple(x / 255.0 for x in rgb_color)
     rgb = tuple(map(lambda x : pow((x + 0.055) / 1.055, 2.4) if x > 0.04045 else x / 12.92, rgb))
 
     xyz = ((rgb[0] * 41.24564 + rgb[1] * 35.75761 + rgb[2] * 18.04375) / 95.0489,
@@ -32,22 +38,31 @@ def rgb_to_lab(color):
     return (116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2]))
 
 def get_lab_distance(lab_color_0, lab_color_1):
+    """Calculates a distance between two colors in the CIELAB color space using the CIE76 color difference formula."""
+
     v = np.subtract(lab_color_1, lab_color_0)
     return np.linalg.norm(v)
 
 def get_palette(filename):
+    """Returns a palette generated from the given image file."""
+
     palette_image = Image.open(filename)
     color_values = palette_image.getpalette()
+    if color_values == None:
+        raise Exception("The image does not have a palette") 
+
     return Palette(color_values)
 
-def generate_lut(palette, res):
-    image = Image.new("RGBA", (res * res, res))
+def generate_lut(palette, size):
+    """Returns a lookup table image generated from the given palette."""
 
-    for xyz in np.ndindex((res, res, res)):
-        color = tuple(int(x * 256.0 / (res - 1)) for x in xyz)
+    image = Image.new("RGBA", (size * size, size))
+
+    for xyz in np.ndindex((size, size, size)):
+        color = tuple(int(x * 256.0 / (size - 1)) for x in xyz)
         color_lightness = np.clip(int(rgb_to_lab(color)[0] / 100.0 * 255.0), 0, 255)
         nearest_color = palette.get_nearest_color(color)
-        pos = (xyz[0] + xyz[2] * res, xyz[1])
+        pos = (xyz[0] + xyz[2] * size, xyz[1])
         image.putpixel(pos, (*nearest_color, color_lightness))
 
     return image
@@ -70,11 +85,15 @@ dithering_matrix = tuple((x / 64.0) - 0.5 for x in (
 ))
 
 def get_dithering_threshold(pos):
+    """Returns a dithering threshold for the given position."""
+
     x = int(pos[0]) % 8
     y = int(pos[1]) % 8
     return dithering_matrix[x + y * 8]
 
 def get_lut_color(lut, color):
+    """Returns a value from the given lookup table for the given color."""
+
     size = lut.height
     rgb = np.floor(np.divide(color, 256.0) * size)
     x = rgb[0] + rgb[2] * size + 0.5 / lut.width
