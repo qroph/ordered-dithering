@@ -21,7 +21,7 @@ class Palette:
         nearest_color_dist = np.inf
         nearest_color_index = 0
         for i in range(self.num_colors):
-            dist = get_lab_distance(self.lab[i], lab_color)
+            dist = get_lab_distance(lab_color, self.lab[i])
             if dist < nearest_color_dist:
                 nearest_color_dist = dist
                 nearest_color_index = i
@@ -43,11 +43,28 @@ def rgb_to_lab(rgb_color):
     return (116 * xyz[1] - 16, 500 * (xyz[0] - xyz[1]), 200 * (xyz[1] - xyz[2]))
 
 
-def get_lab_distance(lab_color_0, lab_color_1):
+def get_lab_distance_CIE76(lab_color_0, lab_color_1):
     """Calculates a distance between two colors in the CIELAB color space using the CIE76 color difference formula."""
 
     v = np.subtract(lab_color_1, lab_color_0)
     return np.linalg.norm(v)
+
+
+def get_lab_distance(lab_color_0, lab_color_1):
+    """Calculates a distance between two colors in the CIELAB color space using the CIE94 color difference formula."""
+
+    dlab = np.subtract(lab_color_1, lab_color_0)
+
+    c0 = np.sqrt(pow(lab_color_0[1], 2) + pow(lab_color_0[2], 2))
+    c1 = np.sqrt(pow(lab_color_1[1], 2) + pow(lab_color_1[2], 2))
+    dc = c0 - c1
+
+    dh = np.sqrt(max(0, pow(dlab[1], 2) + pow(dlab[2], 2) - pow(dc, 2)))
+
+    return np.sqrt(
+        pow(dlab[0], 2) +
+        pow(dc / (1 + 0.045 * c0), 2) +
+        pow(dh / (1 + 0.015 * c0), 2))
 
 
 def get_palette(filename):
