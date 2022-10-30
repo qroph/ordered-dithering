@@ -4,13 +4,14 @@ from PIL import Image
 
 
 class Palette:
-    def __init__(self, rgb_color_values):
+    def __init__(self, rgb_color_values, distance_func):
         """Initializes a palette using the given list of RGB color values [r, g, b, ...]."""
 
         rgb_array = np.array(rgb_color_values, np.uint8).reshape((len(rgb_color_values) // 3, 3))
         self.num_colors = len(rgb_array)
         self.rgb = tuple(tuple(x) for x in rgb_array)
         self.lab = tuple(rgb_to_lab(x) for x in rgb_array)
+        self.get_lab_distance = distance_func
 
 
     def get_nearest_color(self, rgb_color):
@@ -21,7 +22,7 @@ class Palette:
         nearest_color_dist = np.inf
         nearest_color_index = 0
         for i in range(self.num_colors):
-            dist = get_lab_distance(lab_color, self.lab[i])
+            dist = self.get_lab_distance(lab_color, self.lab[i])
             if dist < nearest_color_dist:
                 nearest_color_dist = dist
                 nearest_color_index = i
@@ -50,7 +51,7 @@ def get_lab_distance_CIE76(lab_color_0, lab_color_1):
     return np.linalg.norm(v)
 
 
-def get_lab_distance(lab_color_0, lab_color_1):
+def get_lab_distance_CIE94(lab_color_0, lab_color_1):
     """Calculates a distance between two colors in the CIELAB color space using the CIE94 color difference formula."""
 
     dlab = np.subtract(lab_color_1, lab_color_0)
@@ -67,7 +68,61 @@ def get_lab_distance(lab_color_0, lab_color_1):
         pow(dh / (1 + 0.015 * c0), 2))
 
 
-def get_palette(filename):
+def get_lab_distance_CIEDE2000(lab_color_0, lab_color_1):
+    """Calculates a distance between two colors in the CIELAB color space using the CIEDE2000 color difference formula."""
+
+    (L1, a1, b1) = lab_color_0
+    (L2, a2, b2) = lab_color_1
+
+    C1 = np.sqrt(a1**2 + b1**2)
+    C2 = np.sqrt(a2**2 + b2**2)
+
+    t = 0.5 * (C1 + C2)
+    mult = np.sqrt(t**7 / (t**7 + 25**7))
+
+    a1_ = a1 + 0.5 * a1 * (1 - mult)
+    a2_ = a2 + 0.5 * a2 * (1 - mult)
+
+    C1_ = np.sqrt(a1_**2 + b1**2)
+    C2_ = np.sqrt(a2_**2 + b2**2)
+    C1_C2_ = C1_ * C2_
+
+    h1_ = 0 if C1_ == 0 else np.rad2deg(np.arctan2(b1, a1_)) % 360
+    h2_ = 0 if C2_ == 0 else np.rad2deg(np.arctan2(b2, a2_)) % 360
+
+    dh_ = 0 if C1_C2_ == 0 else \
+        h2_ - h1_ if abs(h1_ - h2_) <= 180 else \
+        h2_ - h1_ + 360 if h2_ <= h1_ else \
+        h2_ - h1_ - 360
+
+    dH_ = 2 * np.sqrt(C1_C2_) * np.sin(np.deg2rad(0.5 * dh_))
+
+    H_average = h1_ + h2_ if C1_C2_ == 0 else \
+        0.5 * (h1_ + h2_) if abs(h1_ - h2_) <= 180 else \
+        0.5 * (h1_ + h2_ + 360) if h1_ + h2_ < 360 else \
+        0.5 * (h1_ + h2_ - 360)
+
+    T = 1 - \
+        0.17 * np.cos(np.rad2deg(H_average - 30)) + \
+        0.24 * np.cos(np.rad2deg(2 * H_average)) + \
+        0.32 * np.cos(np.rad2deg(3 * H_average + 6)) - \
+        0.20 * np.cos(np.rad2deg(4 * H_average - 63))
+
+    t = pow(0.5 * (L1 + L2) - 50, 2)
+    SL = 1 + 0.015 * t / np.sqrt(20 + t)
+
+    t = 0.5 * (C1_ + C2_)
+    SC = 1 + 0.045 * t
+    SH = 1 + 0.015 * t * T
+
+    RT = -2 * mult * np.sin(np.deg2rad(60 * np.exp(-pow((H_average - 275) / 25, 2))))
+
+    dL = L2 - L1
+    dC_ = C2_ - C1_
+    return np.sqrt((dL / SL)**2 + (dC_ / SC)**2 + (dH_ / SH)**2 + RT * dC_ * dH_ / (SC * SH))
+
+
+def get_palette(filename, distance_func):
     """Returns a palette generated from the given image file."""
 
     palette_image = Image.open(filename)
@@ -75,7 +130,7 @@ def get_palette(filename):
     if color_values == None:
         raise Exception("The image does not have a palette") 
 
-    return Palette(color_values)
+    return Palette(color_values, distance_func)
 
 
 def generate_lut(palette, size):
@@ -94,11 +149,17 @@ def generate_lut(palette, size):
 
 
 def main(argv):
-    if len(argv) != 3:
-        print("usage: generate_lut.py palette_filename output_filename lut_size")
+    if len(argv) != 3 and len(argv) != 4:
+        print("usage: generate_lut.py palette_filename output_filename lut_size [color distance formula]")
         sys.exit(2)
 
-    palette = get_palette(argv[0])
+    formula = argv[3] if len(argv) == 4 else ""
+    distance_func = \
+        get_lab_distance_CIE76 if formula == "CIE76" else \
+        get_lab_distance_CIE94 if formula == "CIE94" else \
+        get_lab_distance_CIEDE2000
+
+    palette = get_palette(argv[0], distance_func)
     lut = generate_lut(palette, int(argv[2]))
     lut.save(argv[1])
 
