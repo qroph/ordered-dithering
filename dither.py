@@ -42,7 +42,7 @@ def dither_image(image, lut):
         color = image.getpixel(pos)
         color_lightness = get_lut_color(lut, color)[3]
 
-        spread = color_lightness # This value can be tweaked
+        spread = 0.5 * color_lightness # This value can be tweaked
         threshold = get_dithering_threshold(pos)
         dithering_color = np.clip(np.add(color, spread * threshold), 0, 255)
 
