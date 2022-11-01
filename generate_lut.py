@@ -54,18 +54,14 @@ def get_lab_distance_CIE76(lab_color_0, lab_color_1):
 def get_lab_distance_CIE94(lab_color_0, lab_color_1):
     """Calculates a distance between two colors in the CIELAB color space using the CIE94 color difference formula."""
 
-    dlab = np.subtract(lab_color_1, lab_color_0)
+    C1 = np.sqrt(lab_color_0[1]**2 + lab_color_0[2]**2)
+    C2 = np.sqrt(lab_color_1[1]**2 + lab_color_1[2]**2)
+    dC = C1 - C2
 
-    c0 = np.sqrt(pow(lab_color_0[1], 2) + pow(lab_color_0[2], 2))
-    c1 = np.sqrt(pow(lab_color_1[1], 2) + pow(lab_color_1[2], 2))
-    dc = c0 - c1
+    (dL, da, db) = np.subtract(lab_color_0, lab_color_1)
+    dH = np.sqrt(max(0, da**2 + db**2 - dC**2))
 
-    dh = np.sqrt(max(0, pow(dlab[1], 2) + pow(dlab[2], 2) - pow(dc, 2)))
-
-    return np.sqrt(
-        pow(dlab[0], 2) +
-        pow(dc / (1 + 0.045 * c0), 2) +
-        pow(dh / (1 + 0.015 * c0), 2))
+    return np.sqrt(dL**2 + pow(dC / (1 + 0.045 * C1), 2) + pow(dH / (1 + 0.015 * C1), 2))
 
 
 def get_lab_distance_CIEDE2000(lab_color_0, lab_color_1):
@@ -80,8 +76,9 @@ def get_lab_distance_CIEDE2000(lab_color_0, lab_color_1):
     t = 0.5 * (C1 + C2)
     mult = np.sqrt(t**7 / (t**7 + 25**7))
 
-    a1_ = a1 + 0.5 * a1 * (1 - mult)
-    a2_ = a2 + 0.5 * a2 * (1 - mult)
+    t = 1 + 0.5 * (1 - mult)
+    a1_ = t * a1
+    a2_ = t * a2
 
     C1_ = np.sqrt(a1_**2 + b1**2)
     C2_ = np.sqrt(a2_**2 + b2**2)
