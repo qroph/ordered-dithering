@@ -147,7 +147,7 @@ def generate_lut(palette, size):
 
 def main(argv):
     if len(argv) != 3 and len(argv) != 4:
-        print("usage: generate_lut.py palette_filename output_filename lut_size [color distance formula]")
+        print("usage: generate_lut.py palette_filename output_filename lut_size [color_distance_formula]")
         sys.exit(2)
 
     formula = argv[3] if len(argv) == 4 else ""
