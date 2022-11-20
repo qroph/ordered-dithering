@@ -130,34 +130,41 @@ def get_palette(filename, distance_func):
     return Palette(color_values, distance_func)
 
 
-def generate_lut(palette, size):
+def generate_lut(palette, size, min_spread, max_spread):
     """Returns a lookup table image generated from the given palette."""
 
     image = Image.new("RGBA", (size * size, size))
 
     for xyz in np.ndindex((size, size, size)):
         color = tuple(int(x * 256.0 / (size - 1)) for x in xyz)
-        color_lightness = np.clip(int(rgb_to_lab(color)[0] / 100.0 * 255.0), 0, 255)
+        color_lightness = rgb_to_lab(color)[0] / 100.0
         nearest_color = palette.get_nearest_color(color)
+
+        # This value can be tweaked
+        spread = min_spread + (max_spread - min_spread) * (1 - (2 * color_lightness - 1)**4);
+
         pos = (xyz[0] + xyz[2] * size, xyz[1])
-        image.putpixel(pos, (*nearest_color, color_lightness))
+        image.putpixel(pos, (*nearest_color, int(spread)))
 
     return image
 
 
 def main(argv):
-    if len(argv) != 3 and len(argv) != 4:
-        print("usage: generate_lut.py palette_filename output_filename lut_size [color_distance_formula]")
+    if len(argv) != 3 and len(argv) != 4 and len(argv) != 6:
+        print("usage: generate_lut.py palette_filename output_filename lut_size [color_distance_formula] [min_spread max_spread]")
         sys.exit(2)
 
-    formula = argv[3] if len(argv) == 4 else ""
+    formula = argv[3] if len(argv) >= 4 else ""
     distance_func = \
         get_lab_distance_CIE76 if formula == "CIE76" else \
         get_lab_distance_CIE94 if formula == "CIE94" else \
         get_lab_distance_CIEDE2000
 
+    min_spread = int(argv[4]) if len(argv) == 6 else 0
+    max_spread = int(argv[5]) if len(argv) == 6 else 120
+
     palette = get_palette(argv[0], distance_func)
-    lut = generate_lut(palette, int(argv[2]))
+    lut = generate_lut(palette, int(argv[2]), min_spread, max_spread)
     lut.save(argv[1])
 
 

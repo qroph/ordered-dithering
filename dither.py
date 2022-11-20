@@ -33,18 +33,14 @@ def get_lut_color(lut, color):
     return lut.getpixel((x, y))
 
 
-def dither_image(image, lut, min_spread, max_spread):
+def dither_image(image, lut):
     """Dithers the given image using the given lookup table."""
 
     output = Image.new("RGB", image.size)
 
     for pos in np.ndindex((image.width, image.height)):
         color = image.getpixel(pos)
-        color_lightness = get_lut_color(lut, color)[3] / 255.0
-
-        # This value can be tweaked
-        spread = min_spread + (max_spread - min_spread) * (1 - (2 * color_lightness - 1)**4);
-
+        spread = get_lut_color(lut, color)[3]
         threshold = get_dithering_threshold(pos)
         dithering_color = np.clip(np.add(color, spread * threshold), 0, 255)
 
@@ -53,16 +49,15 @@ def dither_image(image, lut, min_spread, max_spread):
 
     return output
 
+
 def main(argv):
     if len(argv) != 3 and len(argv) != 5:
-        print("usage: dither.py image_filename lut_filename output_filename [min_spread max_spread]")
+        print("usage: dither.py image_filename lut_filename output_filename")
         sys.exit(2)
 
     image = Image.open(argv[0]).convert("RGB")
     lut = Image.open(argv[1])
-    min_spread = int(argv[3]) if len(argv) == 5 else 0
-    max_spread = int(argv[4]) if len(argv) == 5 else 120
-    output = dither_image(image, lut, min_spread, max_spread)
+    output = dither_image(image, lut)
     output.save(argv[2])
 
 
