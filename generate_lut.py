@@ -100,10 +100,10 @@ def get_lab_distance_CIEDE2000(lab_color_0, lab_color_1):
         0.5 * (h1_ + h2_ - 360)
 
     T = 1 - \
-        0.17 * np.cos(np.rad2deg(H_average - 30)) + \
-        0.24 * np.cos(np.rad2deg(2 * H_average)) + \
-        0.32 * np.cos(np.rad2deg(3 * H_average + 6)) - \
-        0.20 * np.cos(np.rad2deg(4 * H_average - 63))
+        0.17 * np.cos(np.deg2rad(H_average - 30)) + \
+        0.24 * np.cos(np.deg2rad(2 * H_average)) + \
+        0.32 * np.cos(np.deg2rad(3 * H_average + 6)) - \
+        0.20 * np.cos(np.deg2rad(4 * H_average - 63))
 
     t = pow(0.5 * (L1 + L2) - 50, 2)
     SL = 1 + 0.015 * t / np.sqrt(20 + t)
